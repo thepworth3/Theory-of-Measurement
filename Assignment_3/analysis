@@ -1,0 +1,153 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Nov 25 16:08:33 2024
+
+@author: thoma
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import math
+import scipy.stats
+from scipy.optimize import curve_fit
+#
+#
+df = pd.read_csv(r"C:\Users\thoma\OneDrive\Documents\University of Winnipeg\2024-2025 Courses\PHYS 3103 Theory of Measurement\Assignment 3\adjusted_data.csv")
+#read in the adjusted data
+x = df.Layer
+d = df.Pressure    #read in our data
+errs = df.error
+N = len(x) #data points
+M_1 = 3 #dimension of quadratic model
+M_2 = 4 #dimension of cubic model
+
+print("n",sum(df.n))
+
+# Reads in the non-adjusted data which I use in comparison plots
+df1 = pd.read_csv(r"C:\Users\thoma\OneDrive\Documents\University of Winnipeg\2024-2025 Courses\PHYS 3103 Theory of Measurement\Assignment 3\data.csv")
+#read in the adjusted data
+dlayer = df1.Layer
+dpressure = df1.Pressure
+
+
+
+# Define quadratic and cubic models
+def quadratic_model(x, A0, A1, A2):
+    return A0 + A1 * x + A2 * x**2
+
+def cubic_model(x, A0, A1, A2, A3):
+    return A0 + A1 * x + A2 * x**2 + A3 * x**3
+
+#Analysis for quadratic model
+
+
+E = 1*np.diag(errs)
+Einv = np.linalg.inv(E)
+
+#Define G-transpose matrix
+
+GT = np.array([np.ones(len(x)),x,x**2])
+G = GT.T
+print(GT)
+print(G)
+
+#Now get Psi
+Psi = GT@Einv@G
+Psiinv = np.linalg.inv(Psi)
+print(Psiinv)
+
+#bring it all together
+A = Psiinv@GT@Einv@d
+print(A)
+
+#Plot the model as continuous along the range of x-values
+
+xvals = np.linspace(-7,7, 200)
+model = quadratic_model(xvals, A[0], A[1], A[2])
+
+
+#Now do that all again for the cubic model. Put C after all the matrices to stand for "cubic"
+
+
+GTC = np.array([np.ones(len(x)),x,x**2,x**3])
+GC = GTC.T
+# print(GTC)
+# print(GC)
+
+#Now get Psi
+PsiC = GTC@Einv@GC
+PsiinvC = np.linalg.inv(PsiC)
+# print(PsiinvC)
+
+#bring it all together
+AC = PsiinvC@GTC@Einv@d
+print(AC)
+
+#Plot the model as continuous along the range of x-values
+
+xvals = np.linspace(-7,7, 200)
+modelC = cubic_model(xvals, AC[0], AC[1], AC[2], AC[3])
+
+plt.figure(figsize=(4,3),dpi=100)
+plt.errorbar(x,d, yerr=errs,  fmt = ".", label = 'data')
+plt.plot(xvals, model, label ="Quadratic Model")
+plt.plot(xvals, modelC, label ="Cubic Model")
+plt.xlabel("x-values")
+plt.ylabel("measured data values d")
+plt.legend()
+plt.show()
+
+
+#Now we need to get the variance-covariance matrix. Use to get errors on our model paramters.
+# As in section 10.5, 10.6 Psiinv is variance-covariance matrix, and can give us the parameter errors.
+sigma0 = np.sqrt( Psiinv[0][0] )
+sigma1 = np.sqrt( Psiinv[1][1] )
+sigma2 = np.sqrt(Psiinv[2][2])
+
+
+print('A_0 = ', np.round(A[0],2),'+-',np.round(sigma0,2))
+print('A_1 = ',np.round(A[1],3),'+-',np.round(sigma1,3))
+print('A_2 = ',np.round(A[2],3),'+-',np.round(sigma2,3))
+
+#cubic \
+sigma0C = np.sqrt(PsiinvC[0][0] )
+sigma1C = np.sqrt(PsiinvC[1][1] )
+sigma2C = np.sqrt(PsiinvC[2][2] )
+sigma3C = np.sqrt(PsiinvC[3][3] )
+
+print('A_0 = ', np.round(AC[0],2),'+-',np.round(sigma0C,2))
+print('A_1 = ',np.round(AC[1],3),'+-',np.round(sigma1C,3))
+print('A_2 = ',np.round(AC[2],3),'+-',np.round(sigma2C,3))
+print('A_3 = ',np.round(AC[3],3),'+-',np.round(sigma3C,3))
+
+
+#Now we need to do part d, and do a Bayesian mode comparison.
+M_1 = 4
+m_2 = 3
+
+print(len(d))
+print(len(x))
+print(len(errs))
+print(len(model))
+chisq_1 = np.sum((d - cubic_model(x, AC[0], AC[1], AC[2], AC[3]))**2/errs)
+chisq_2 = np.sum((d - quadratic_model(x, A[0], A[1], A[2]))**2/errs)
+delta = chisq_2 - chisq_1
+
+O_12 = math.exp(delta/2)*(2*np.pi)**((M_1-M_2)/2)*np.sqrt(np.linalg.det(PsiinvC)/(np.linalg.det(Psiinv)))
+print("Bayesian odds ratio is",O_12)
+
+
+#part e
+chisq = np.sum((d - quadratic_model(x, A[0], A[1], A[2]))**2/quadratic_model(x, A[0], A[1], A[2]))
+df = 6
+print(chisq)
+chisqC = np.sum((d - cubic_model(x, AC[0], AC[1], AC[2], AC[3]))**2/cubic_model(x, AC[0], AC[1], AC[2], AC[3]))
+dfc = 5
+print(chisqC)
+# now get p-value
+from scipy.stats import  chi2
+p_value_fit = 1 - chi2.cdf(chisq, 6)
+print("Goodness-of-fit p-value:", p_value_fit)
+p_value_fitC = 1 - chi2.cdf(chisq, 5)
+print("Goodness-of-fit p-value:", p_value_fitC)
